@@ -1,0 +1,23 @@
+{
+  "name": "tactical-map",
+  "version": "1.0.0",
+  "description": "Escape from Tarkov realtime co-op tactical map Discord Activity",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "bundle:sdk": "node scripts/bundle-sdk.mjs",
+    "prestart": "node scripts/bundle-sdk.mjs",
+    "start": "node server.js",
+    "dev": "node scripts/bundle-sdk.mjs && node server.js"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.4.0",
+    "dotenv": "^16.4.7",
+    "esbuild": "^0.25.2",
+    "express": "^4.21.2",
+    "ws": "^8.18.1"
+  }
+}
