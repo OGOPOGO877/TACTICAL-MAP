@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>TACTICAL MAP</title>
     <link rel="stylesheet" href="/style.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect fill='%230b0c0e' width='64' height='64'/><path fill='%23c9a227' d='M32 8 56 56H8z'/></svg>" />
@@ -100,8 +102,19 @@
             <button data-pin="MEET">MEET</button>
             <button data-pin="SNIPER">SNIPER</button>
           </div>
+          <div id="pen-bar" hidden>
+            <div id="pen-colors"></div>
+            <label class="pen-width-wrap">
+              <span>SIZE</span>
+              <input id="pen-width" type="range" min="1" max="8" value="3" />
+              <b id="pen-width-label">3</b>
+            </label>
+          </div>
           <div id="stage"></div>
-          <input id="text-editor" maxlength="200" hidden placeholder="TEXT  ·  ENTER" />
+          <div id="text-editor-wrap" hidden>
+            <input id="text-editor" maxlength="200" enterkeyhint="done" autocomplete="off" autocorrect="off" placeholder="TEXT" />
+            <button id="text-ok" type="button">OK</button>
+          </div>
           <div id="map-hud">
             <button id="btn-fit" type="button">FIT TO SCREEN</button>
             <button id="btn-reset" type="button">RESET VIEW</button>
