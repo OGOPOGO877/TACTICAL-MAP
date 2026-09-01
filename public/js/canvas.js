@@ -519,6 +519,8 @@ export function createMapView(stageEl, overlayEl) {
   }
 
   window.addEventListener("resize", resize);
+  window.visualViewport?.addEventListener("resize", resize);
+  window.visualViewport?.addEventListener("scroll", resize);
   resize();
   fitToScreen();
 

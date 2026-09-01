@@ -1,4 +1,4 @@
-import { loadConfig, setLocalUsername } from "./config.js";
+import { loadConfig, setLocalUsername, PEN_COLORS, PEN_WIDTHS } from "./config.js";
 import { initDiscord, updatePresence } from "./discord.js";
 import { createSocket } from "./websocket.js";
 import { createMapView } from "./canvas.js";
@@ -18,10 +18,19 @@ import {
   setCursor,
 } from "./state.js";
 
+["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+});
+
 const state = createState();
 const ui = bindUi();
 let currentTool = TOOL.SELECT;
 let currentPin = "ENEMY";
+let penColor = sessionStorage.getItem("tactical-map-pen-color") || "#e74c3c";
+let penWidthIndex = Number(sessionStorage.getItem("tactical-map-pen-width") || "3");
+if (!Number.isFinite(penWidthIndex) || penWidthIndex < 1 || penWidthIndex > PEN_WIDTHS.length) {
+  penWidthIndex = 3;
+}
 let socket = null;
 let tools = null;
 let mapView = null;
@@ -139,6 +148,7 @@ async function main() {
     send,
     getTool: () => currentTool,
     getPinType: () => currentPin,
+    getStyle: () => ({ color: penColor, width: PEN_WIDTHS[penWidthIndex - 1] }),
     setSelected(id) {
       state.selectedId = id;
       refreshScene();
@@ -199,6 +209,20 @@ async function main() {
     });
   }
   ui.setPinType(currentPin);
+  ui.bindPenStyle({
+    colors: PEN_COLORS,
+    color: penColor,
+    widthIndex: penWidthIndex,
+    onColor(hex) {
+      penColor = hex;
+      sessionStorage.setItem("tactical-map-pen-color", hex);
+      ui.setPenColor(hex);
+    },
+    onWidth(index) {
+      penWidthIndex = index;
+      sessionStorage.setItem("tactical-map-pen-width", String(index));
+    },
+  });
   setTool(TOOL.SELECT);
 
   document.getElementById("btn-fit").addEventListener("click", () => {

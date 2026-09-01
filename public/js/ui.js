@@ -1,4 +1,4 @@
-import { PIN_META, avatarUrl } from "./config.js";
+import { PIN_META, PEN_COLORS, avatarUrl } from "./config.js";
 import { TOOL } from "./protocol.js";
 
 export function bindUi() {
@@ -17,11 +17,17 @@ export function bindUi() {
     localRoom: document.getElementById("local-room"),
     localUrl: document.getElementById("local-url"),
     pinBar: document.getElementById("pin-bar"),
+    penBar: document.getElementById("pen-bar"),
+    penColors: document.getElementById("pen-colors"),
+    penWidth: document.getElementById("pen-width"),
+    penWidthLabel: document.getElementById("pen-width-label"),
     modal: document.getElementById("modal"),
     modalText: document.getElementById("modal-text"),
     modalOk: document.getElementById("modal-ok"),
     modalCancel: document.getElementById("modal-cancel"),
+    textEditorWrap: document.getElementById("text-editor-wrap"),
     textEditor: document.getElementById("text-editor"),
+    textOk: document.getElementById("text-ok"),
     toolButtons: [...document.querySelectorAll("[data-tool]")],
     pinButtons: [...document.querySelectorAll("[data-pin]")],
   };
@@ -99,6 +105,46 @@ export function bindUi() {
       btn.classList.toggle("active", btn.dataset.tool === tool);
     }
     els.pinBar.hidden = tool !== TOOL.PIN;
+    const styleTools = tool === TOOL.PEN || tool === TOOL.ARROW || tool === TOOL.CIRCLE || tool === TOOL.TEXT;
+    els.penBar.hidden = !styleTools;
+  }
+
+  function bindPenStyle({ colors, color, widthIndex, onColor, onWidth }) {
+    els.penColors.innerHTML = "";
+    const list = colors || PEN_COLORS;
+    for (const hex of list) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pen-swatch";
+      btn.style.background = hex;
+      btn.dataset.color = hex;
+      btn.title = hex;
+      btn.classList.toggle("active", hex.toLowerCase() === color.toLowerCase());
+      btn.addEventListener("click", () => onColor(hex));
+      els.penColors.appendChild(btn);
+    }
+    const custom = document.createElement("input");
+    custom.type = "color";
+    custom.id = "pen-custom";
+    custom.value = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#e74c3c";
+    custom.title = "CUSTOM";
+    custom.addEventListener("input", () => onColor(custom.value));
+    els.penColors.appendChild(custom);
+    els.penWidth.value = String(widthIndex);
+    els.penWidthLabel.textContent = String(widthIndex);
+    els.penWidth.oninput = () => {
+      const n = Number(els.penWidth.value);
+      els.penWidthLabel.textContent = String(n);
+      onWidth(n);
+    };
+  }
+
+  function setPenColor(color) {
+    for (const btn of els.penColors.querySelectorAll(".pen-swatch")) {
+      btn.classList.toggle("active", btn.dataset.color.toLowerCase() === color.toLowerCase());
+    }
+    const custom = document.getElementById("pen-custom");
+    if (custom && /^#[0-9a-fA-F]{6}$/.test(color)) custom.value = color;
   }
 
   function setPinType(type) {
@@ -124,18 +170,19 @@ export function bindUi() {
 
   function requestText(screen, containerRect) {
     return new Promise((resolve) => {
+      const wrap = els.textEditorWrap;
       const input = els.textEditor;
-      input.hidden = false;
+      wrap.hidden = false;
       input.value = "";
-      const x = Math.min(containerRect.width - 180, Math.max(8, screen.x));
-      const y = Math.min(containerRect.height - 36, Math.max(8, screen.y - 14));
-      input.style.left = `${x}px`;
-      input.style.top = `${y}px`;
-      input.focus();
+      const x = Math.min(containerRect.width - 220, Math.max(8, screen.x));
+      const y = Math.min(containerRect.height - 48, Math.max(8, screen.y - 14));
+      wrap.style.left = `${x}px`;
+      wrap.style.top = `${y}px`;
       const finish = (value) => {
-        input.hidden = true;
+        wrap.hidden = true;
         input.onkeydown = null;
         input.onblur = null;
+        if (els.textOk) els.textOk.onclick = null;
         resolve(value);
       };
       input.onkeydown = (e) => {
@@ -146,7 +193,8 @@ export function bindUi() {
           finish("");
         }
       };
-      input.onblur = () => finish(input.value.trim());
+      if (els.textOk) els.textOk.onclick = () => finish(input.value.trim());
+      setTimeout(() => input.focus(), 40);
     });
   }
 
@@ -177,6 +225,8 @@ export function bindUi() {
     renderUsers,
     setTool,
     setPinType,
+    bindPenStyle,
+    setPenColor,
     confirmClear,
     requestText,
     showLocalDev,

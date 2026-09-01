@@ -23,6 +23,21 @@ export const PIN_META = {
 
 export const PING_MS = 3000;
 
+export const PEN_COLORS = [
+  "#e74c3c",
+  "#e67e22",
+  "#f1c40f",
+  "#2ecc71",
+  "#3498db",
+  "#9b59b6",
+  "#fd79a8",
+  "#ecf0f1",
+  "#111111",
+  "#c9a227",
+];
+
+export const PEN_WIDTHS = [0.0014, 0.0022, 0.0035, 0.005, 0.007, 0.01, 0.014, 0.02];
+
 export function isDiscordHost() {
   const host = location.hostname;
   return host.endsWith("discordsays.com") || host.endsWith("discord.com") || host.endsWith("discordapp.com");

@@ -14,11 +14,23 @@ function simplify(points, minDist) {
   return out;
 }
 
-export function createTools({ mapView, getState, send, onTextRequest, getPinType, getTool, setSelected }) {
+function isTouchLike(ev) {
+  return ev.pointerType === "touch" || ev.pointerType === "pen";
+}
+
+export function createTools({
+  mapView,
+  getState,
+  send,
+  onTextRequest,
+  getPinType,
+  getTool,
+  getStyle,
+  setSelected,
+}) {
   let dragging = false;
   let panning = false;
   let mode = null;
-  let startMap = null;
   let startScreen = null;
   let draft = null;
   let sent = false;
@@ -26,6 +38,10 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
   let lastCursor = 0;
   let lastCursorPos = { x: -1, y: -1 };
   let pointerId = null;
+  let pinch = null;
+  let ignoreDraw = false;
+  const pointers = new Map();
+  let onZoom = null;
 
   function meColor() {
     return getState().me?.color || "#e74c3c";
@@ -37,7 +53,11 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
   }
 
   function style() {
-    return { color: meColor(), width: 0.0035 };
+    const custom = getStyle?.();
+    return {
+      color: custom?.color || meColor(),
+      width: custom?.width || 0.0035,
+    };
   }
 
   function flushScene(preview) {
@@ -204,32 +224,89 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
   }
 
   function eraseAt(n) {
-    const hit = mapView.hitTest(n.x, n.y, 14);
+    const hit = mapView.hitTest(n.x, n.y, 18);
     if (hit) removeObject(hit.id);
   }
 
+  function finishStroke() {
+    if (mode === "move" && getState().selectedId) {
+      const obj = getState().objects.get(getState().selectedId);
+      if (obj) updateObject(obj, true);
+    }
+    if (mode === TOOL.PEN) endPen();
+    else if (mode === TOOL.ARROW) endArrow();
+    else if (mode === TOOL.CIRCLE) endCircle();
+    dragging = false;
+    panning = false;
+    mode = null;
+    draft = null;
+    startScreen = null;
+    pointerId = null;
+    sent = false;
+  }
+
+  function startPinch() {
+    finishStroke();
+    ignoreDraw = true;
+    const pts = [...pointers.values()];
+    if (pts.length < 2) return;
+    pinch = {
+      dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1,
+      midX: (pts[0].x + pts[1].x) / 2,
+      midY: (pts[0].y + pts[1].y) / 2,
+    };
+  }
+
+  function movePinch() {
+    const pts = [...pointers.values()].slice(0, 2);
+    if (pts.length < 2 || !pinch) return;
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+    const midX = (pts[0].x + pts[1].x) / 2;
+    const midY = (pts[0].y + pts[1].y) / 2;
+    mapView.zoomAt(pinch.midX, pinch.midY, dist / pinch.dist);
+    mapView.pan(midX - pinch.midX, midY - pinch.midY);
+    pinch.dist = dist;
+    pinch.midX = midX;
+    pinch.midY = midY;
+    onZoom?.();
+  }
+
   function onPointerDown(ev) {
-    if (ev.button === 2 || ev.button === 1 || mapView.isSpaceDown()) {
-      panning = true;
-      pointerId = ev.pointerId;
-      startScreen = mapView.eventToLocal(ev);
-      mapView.stageEl.setPointerCapture?.(ev.pointerId);
-      ev.preventDefault();
+    ev.preventDefault();
+    const local = mapView.eventToLocal(ev);
+    pointers.set(ev.pointerId, local);
+
+    if (!isTouchLike(ev)) {
+      try {
+        mapView.stageEl.setPointerCapture?.(ev.pointerId);
+      } catch {
+        /* iOS / some browsers */
+      }
+    }
+
+    if (pointers.size >= 2) {
+      startPinch();
       return;
     }
-    if (ev.button !== 0) return;
-    const local = mapView.eventToLocal(ev);
+    if (ignoreDraw) return;
+
+    if (ev.pointerType === "mouse" && (ev.button === 2 || ev.button === 1 || mapView.isSpaceDown())) {
+      panning = true;
+      pointerId = ev.pointerId;
+      startScreen = local;
+      return;
+    }
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+
     const n = mapView.toMap(local.x, local.y);
     maybeCursor(n);
     const tool = getTool();
     dragging = true;
     pointerId = ev.pointerId;
-    startMap = n;
     startScreen = local;
-    mapView.stageEl.setPointerCapture?.(ev.pointerId);
 
     if (tool === TOOL.SELECT) {
-      const hit = mapView.hitTest(n.x, n.y, 12);
+      const hit = mapView.hitTest(n.x, n.y, 16);
       setSelected(hit?.id || null);
       mode = hit ? "move" : "pan";
       if (hit) {
@@ -263,16 +340,24 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
   }
 
   function onPointerMove(ev) {
+    ev.preventDefault();
     const local = mapView.eventToLocal(ev);
+    if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, local);
+
+    if (pinch && pointers.size >= 2) {
+      movePinch();
+      return;
+    }
+
     const n = mapView.toMap(local.x, local.y);
     maybeCursor(n);
 
-    if (panning && startScreen) {
+    if (panning && startScreen && (pointerId == null || ev.pointerId === pointerId)) {
       mapView.pan(local.x - startScreen.x, local.y - startScreen.y);
       startScreen = local;
       return;
     }
-    if (!dragging) return;
+    if (!dragging || (pointerId != null && ev.pointerId !== pointerId)) return;
 
     if (mode === "move" && draft) {
       const dx = n.x - draft._ox;
@@ -311,21 +396,24 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
     else if (mode === TOOL.ERASER) eraseAt(n);
   }
 
-  function onPointerUp() {
-    if (mode === "move" && getState().selectedId) {
-      const obj = getState().objects.get(getState().selectedId);
-      if (obj) updateObject(obj, true);
+  function onPointerUp(ev) {
+    pointers.delete(ev.pointerId);
+
+    if (pinch) {
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) {
+        ignoreDraw = false;
+        dragging = false;
+        panning = false;
+        pointerId = null;
+      }
+      return;
     }
-    if (mode === TOOL.PEN) endPen();
-    else if (mode === TOOL.ARROW) endArrow();
-    else if (mode === TOOL.CIRCLE) endCircle();
-    dragging = false;
-    panning = false;
-    mode = null;
-    draft = null;
-    startMap = null;
-    startScreen = null;
-    pointerId = null;
+
+    if (pointers.size === 0) ignoreDraw = false;
+    if (pointerId != null && ev.pointerId !== pointerId && !panning && !dragging) return;
+    if (pointerId != null && ev.pointerId !== pointerId) return;
+    finishStroke();
   }
 
   function onWheel(ev) {
@@ -336,14 +424,20 @@ export function createTools({ mapView, getState, send, onTextRequest, getPinType
     onZoom?.();
   }
 
-  let onZoom = null;
-
-  mapView.stageEl.addEventListener("pointerdown", onPointerDown);
-  mapView.stageEl.addEventListener("pointermove", onPointerMove);
-  mapView.stageEl.addEventListener("pointerup", onPointerUp);
-  mapView.stageEl.addEventListener("pointercancel", onPointerUp);
-  mapView.stageEl.addEventListener("wheel", onWheel, { passive: false });
+  const opts = { passive: false };
+  mapView.stageEl.addEventListener("pointerdown", onPointerDown, opts);
+  mapView.stageEl.addEventListener("pointermove", onPointerMove, opts);
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+  mapView.stageEl.addEventListener("wheel", onWheel, opts);
   mapView.stageEl.addEventListener("contextmenu", (e) => e.preventDefault());
+  mapView.stageEl.addEventListener(
+    "touchmove",
+    (e) => {
+      e.preventDefault();
+    },
+    opts,
+  );
 
   return {
     flushScene,
